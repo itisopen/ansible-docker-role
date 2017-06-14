@@ -1,8 +1,23 @@
 ---
+- name: Docker - Install prerequisite packages
+  become: true
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - yum-utils
+    - device-mapper-persistent-data
+    - lvm2
+  tags:
+    - docker
+
 - name: Docker - Install docker repository
-  copy: src=docker.repo
-        dest=/etc/yum.repos.d/
-        owner=root group=root mode=0644
+  get_url: 
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+    owner: root
+    group: root
+    mode: 0644
 
 - name: Docker - Install docker packages
   become: true
@@ -10,8 +25,7 @@
     name: "{{ item }}"
     state: latest
   with_items:
-    - docker-engine
-    - lvm2
+    - docker-ce
   tags:
     - docker
 
@@ -63,9 +77,7 @@
 
 - name: Docker - Convert docker storage pool to thinpool
   command: lvconvert -y --zero n -c 512K --thinpool docker/thinpool --poolmetadata docker/thinpoolmeta
-  when:
-    - allocate_docker_storage.changed
-    - docker_storage_size|default(False)
+  when: docker_storage_size|default(False)
   tags:
     - docker
 
@@ -94,6 +106,14 @@
 
 - name: Docker - Apply new docker storage LVM profile
   command: lvchange --metadataprofile docker-thinpool docker/thinpool
+  when:
+    - docker_lvm_profile.changed
+    - docker_storage_size|default(False)
+  tags:
+    - docker
+
+- name: Docker - Enable monitoring for logical volumes
+  command: lvs -o+seg_monitor
   when:
     - docker_lvm_profile.changed
     - docker_storage_size|default(False)
